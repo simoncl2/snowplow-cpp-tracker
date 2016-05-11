@@ -23,7 +23,29 @@ See the Apache License Version 2.0 for the specific language governing permissio
 
 using namespace std;
 
-#if defined(WIN32) || defined(_WIN32) || defined(__WIN32) && !defined(__CYGWIN__)
+#define SNOWPLOW_TEST_SUITE 1
+#if defined(SNOWPLOW_TEST_SUITE)
+
+#if !defined(UGH)
+#define UGH
+#include <thread>
+#include <mutex>
+#include <vector>
+#include <iostream>
+
+struct Request {
+  string method;
+  string url;
+  string query_string;
+  string post_data;
+  list<int> row_ids;
+  bool oversize;
+};
+
+list<Request> test_get_http_request_results(void);
+#endif
+
+#elif defined(WIN32) || defined(_WIN32) || defined(__WIN32) && !defined(__CYGWIN__)
 
 #include <windows.h>
 #include <WinInet.h>

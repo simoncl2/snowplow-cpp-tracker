@@ -27,6 +27,7 @@ See the Apache License Version 2.0 for the specific language governing permissio
 #include "http_client.hpp"
 #include "http_request_result.hpp"
 #include "cracked_url.hpp"
+#include <iostream>
 
 using namespace std;
 
@@ -66,8 +67,6 @@ private:
 
   thread m_daemon_thread;
   condition_variable m_check_db;
-  condition_variable m_check_fin;
-  mutex m_flush_fin;
   mutex m_db_select;
   mutex m_run_check;
   bool m_running;

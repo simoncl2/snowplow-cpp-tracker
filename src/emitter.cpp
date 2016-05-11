@@ -32,6 +32,8 @@ Emitter::Emitter(const string & uri, Strategy strategy, Method method, Protocol 
   this->m_send_limit = send_limit;
   this->m_byte_limit_post = byte_limit_post;
   this->m_byte_limit_get = byte_limit_get;
+
+  this->m_running = false;
 }
 
 Emitter::~Emitter() {
@@ -41,17 +43,27 @@ Emitter::~Emitter() {
 // --- Controls
 
 void Emitter::start() {
+  cout << "getting run lock.." << endl;
   unique_lock<mutex> locker(this->m_run_check);
+  cout << "got run lock: " << this->m_running << endl;
   if (this->m_running) {
+    cout << "it's running! I'm outta here";
     locker.unlock(); // refuse to start more than once
     return;
   }
+  cout << "everything looks good to start thread" << endl;
   this->m_running = true;
+  cout << "thread start" << endl;
   this->m_daemon_thread = thread(&Emitter::run, this);
+  cout << "thread going ok!" << endl;
   locker.unlock();
+  cout << "started okay" << endl;
+  this->flush();
+  cout << "flushed okay" << endl;
 }
 
 void Emitter::stop() {
+  flush();
   unique_lock<mutex> locker(this->m_run_check);
   if (this->m_running == true) {
     this->m_running = false;
@@ -66,27 +78,31 @@ void Emitter::stop() {
 
 void Emitter::add(Payload payload) {
   this->m_db.insert_payload(payload);
-  this->m_check_db.notify_all();
+  this->flush();
 }
 
 void Emitter::flush() {
-  this->m_check_db.notify_all();
-
-  unique_lock<mutex> locker(this->m_flush_fin);
-  this->m_check_fin.wait(locker);
-  locker.unlock();
-
-  this->stop();
+	if (this->is_running()) {
+		this->m_check_db.notify_all();
+  }
+  else {
+    cout << "flushed while not running" << endl;
+  }
 }
 
 // --- Private
 
 void Emitter::run() {
+  unsigned int sent_count = 0;
   do {
+    cout << "locking" << endl;
+
     list<Storage::EventRow>* event_rows = new list<Storage::EventRow>;
     this->m_db.select_event_row_range(event_rows, this->m_send_limit);
 
     if (event_rows->size() > 0) {
+      sent_count += event_rows->size();
+      cout << "I need to do some sending!" << endl;
       list<HttpRequestResult>* results = new list<HttpRequestResult>;
       this->do_send(event_rows, results);
 
@@ -118,18 +134,24 @@ void Emitter::run() {
       delete(results);
       delete(success_ids);
     } else {
+      cout << "nothing needed doing :(" << endl;
       delete(event_rows);
-
-      this->m_check_fin.notify_all();
 
       unique_lock<mutex> locker(this->m_db_select);
       this->m_check_db.wait(locker);
       locker.unlock();
+
+      cout << "awoken!" << endl;
     }
+
+     cout << "unlocked!" << endl;
   } while (this->is_running());
+
+  cout << "I stopped after getting " << sent_count << " events" << endl;
 }
 
 void Emitter::do_send(list<Storage::EventRow>* event_rows, list<HttpRequestResult>* results) {
+  cout << "sending" << endl;
   list<std::future<HttpRequestResult>> request_futures;
 
   // Send each request in its own thread
